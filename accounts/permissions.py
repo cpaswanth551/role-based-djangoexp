@@ -24,7 +24,8 @@ class UserPermission(permissions.BasePermission):
         if request.method == "POST":
             if request.user.role == "admin":
                 return True
-            return request.user.has_perm("accounts.can_create_friends")
+            else:
+                return request.user.has_perm("accounts.can_create_friends")
 
         return True
 

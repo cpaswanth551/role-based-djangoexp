@@ -1,18 +1,24 @@
-from rest_framework import viewsets, filters
+from django.conf import settings
+import jwt
+from rest_framework import viewsets, filters, status
 from django.db.models import Q
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
+from django.contrib.auth import authenticate
+from rest_framework.permissions import IsAuthenticated
 
 from accounts.models import User
 from accounts.permissions import IsAdminUser, IsRegularUser, UserPermission
-from accounts.serializers import UserSerializer
+from accounts.serializers import LoginSerializer, RegisterSerializer, TokenRefreshSerializer, UserSerializer
+from .utils import generate_tokens
 
 # Create your views here.
 
 
 class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
-    permission_classes = [UserPermission]
+    permission_classes = [IsAuthenticated, UserPermission]
     filter_backends = [filters.SearchFilter]
 
     search_fields = ["username", "email", "first_name", "last_name"]
@@ -82,3 +88,90 @@ class UserViewSet(viewsets.ModelViewSet):
             serializer.save(created_by=self.request.user)
         else:
             serializer.save()
+
+    
+    @action(detail=False,methods=['post'],permission_classes=[AllowAny])
+    def register(self,request):
+        serializer = RegisterSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response(
+                {
+                    "message": "User registered successfully",
+                    "user": {
+                        "id": user.id,
+                        "username": user.username,
+                        "email": user.email,
+                    },
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+class AuthViewSet(viewsets.ViewSet):
+    permission_classes = [AllowAny]
+
+    @action(detail=False, methods=["post"])
+    def token(self, request):
+        serializer = LoginSerializer(data=request.data)
+
+        serializer.is_valid(raise_exception=True)
+
+        user = authenticate(
+            username=serializer.validated_data["username"],
+            password=serializer.validated_data["password"],
+        )
+
+        if not user:
+            return Response(
+                {"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        access_token, refresh_token = generate_tokens(user)
+
+        return Response(
+            {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "role": user.role,
+                },
+            }
+        )
+
+    @action(detail=False, methods=["post"])
+    def refresh_token(self, request):
+        serializer = TokenRefreshSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            refresh_token = serializer.validated_data["refresh_token"]
+            payload = jwt.decode(
+                refresh_token, settings.SECRET_KEY, algorithms=["HS256"]
+            )
+
+            if payload.get("token_type") != "refresh":
+                raise jwt.InvalidTokenError("Not a refresh token")
+
+            user = User.objects.get(id=payload["user_id"])
+            access_token, new_refresh_token = generate_tokens(user)
+
+            return Response(
+                {"access_token": access_token, "refresh_token": new_refresh_token}
+            )
+
+        except jwt.ExpiredSignatureError:
+            return Response(
+                {"error": "Refresh token has expired"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        except (jwt.InvalidTokenError, User.DoesNotExist):
+            return Response(
+                {"error": "Invalid refresh token"}, status=status.HTTP_401_UNAUTHORIZED
+            )

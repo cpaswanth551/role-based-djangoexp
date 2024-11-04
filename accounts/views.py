@@ -137,6 +137,7 @@ class AuthViewSet(viewsets.ViewSet):
 
         try:
             refresh_token = serializer.validated_data["refresh_token"]
+            print("Received refresh token:", refresh_token)
             payload = jwt.decode(
                 refresh_token, settings.SECRET_KEY, algorithms=["HS256"]
             )
@@ -156,7 +157,12 @@ class AuthViewSet(viewsets.ViewSet):
                 {"error": "Refresh token has expired"},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
-        except (jwt.InvalidTokenError, User.DoesNotExist):
+        except jwt.InvalidTokenError as e:
+            print("Invalid token error:", str(e))
             return Response(
                 {"error": "Invalid refresh token"}, status=status.HTTP_401_UNAUTHORIZED
+            )
+        except User.DoesNotExist:
+            return Response(
+                {"error": "User does not exist"}, status=status.HTTP_401_UNAUTHORIZED
             )

@@ -41,7 +41,7 @@ class AuthMiddleware(MiddlewareMixin):
             "/admin",
             "/api/v1/auth/token",
             "/api/v1/users/register",
-            "/api/v1/auth/refresh-token",
+            "/api/v1/auth/refresh_token",
         ]
 
         if any(path.startswith(skip_path) for skip_path in skip_auth_paths):

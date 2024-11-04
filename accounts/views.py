@@ -1,54 +1,70 @@
+# views.py
+
 from django.conf import settings
 import jwt
 from rest_framework import viewsets, filters, status
 from django.db.models import Q
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth import authenticate
-from rest_framework.permissions import IsAuthenticated
 
 from accounts.models import User
 from accounts.permissions import IsAdminUser, IsRegularUser, UserPermission
-from accounts.serializers import LoginSerializer, RegisterSerializer, TokenRefreshSerializer, UserSerializer
+from accounts.serializers import (
+    LoginSerializer,
+    RegisterSerializer,
+    TokenRefreshSerializer,
+    UserSerializer,
+)
 from .utils import generate_tokens
-
-# Create your views here.
 
 
 class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated, UserPermission]
     filter_backends = [filters.SearchFilter]
-
     search_fields = ["username", "email", "first_name", "last_name"]
 
     def get_queryset(self):
         user = self.request.user
         if user.role == "admin":
             return User.objects.all()
-
         elif user.role == "user":
-            return User.objects.filter(
-                Q(id=user.id) | Q(created_by=user)  # themselves  # their friends
-            )
-
-        # Friends can only see themselves
+            return User.objects.filter(Q(id=user.id) | Q(created_by=user))
         else:
             return User.objects.filter(id=user.id)
 
+    @action(detail=False, methods=["post"], permission_classes=[AllowAny])
+    def register(self, request):
+        """Custom action for user registration"""
+        serializer = RegisterSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response(
+                {
+                    "message": "User registered successfully",
+                    "user": {
+                        "id": user.id,
+                        "username": user.username,
+                        "email": user.email,
+                    },
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def perform_create_friend(self, serializer):
+        """Helper method to set the creator of a friend"""
+        role = serializer.validated_data.get("role", "user")
+        serializer.save(created_by=self.request.user if role == "friend" else None)
+
     @action(detail=False, methods=["get"], permission_classes=[IsAdminUser])
     def analytics(self, request):
-        """Custom endpoint for analytics, only accessible by admin"""
+        """Custom endpoint for analytics, accessible only by admins"""
         total_users = User.objects.count()
         total_friends = User.objects.filter(role="friend").count()
-
-        return Response(
-            {
-                "total_users": total_users,
-                "total_friends": total_friends,
-            }
-        )
+        return Response({"total_users": total_users, "total_friends": total_friends})
 
     @action(
         detail=False, methods=["get"], permission_classes=[IsRegularUser | IsAdminUser]
@@ -71,9 +87,7 @@ class UserViewSet(viewsets.ModelViewSet):
     def manage_friend(self, request, pk=None):
         """Endpoint for users to manage their friends' settings"""
         friend = self.get_object()
-        if friend.created_by != request.user or not request.user.has_perm(
-            "accounts.can_manage_own_friends"
-        ):
+        if friend.created_by != request.user:
             return Response(
                 {"detail": "You do not have permission to manage this friend"},
                 status=403,
@@ -81,43 +95,14 @@ class UserViewSet(viewsets.ModelViewSet):
         # Add friend management logic here
         return Response({"status": "friend settings updated"})
 
-    def perform_create(self, serializer):
-        # Set created_by field when creating friend accounts
-        role = serializer.validated_data.get("role", "user")
-        if role == "friend":
-            serializer.save(created_by=self.request.user)
-        else:
-            serializer.save()
-
-    
-    @action(detail=False,methods=['post'],permission_classes=[AllowAny])
-    def register(self,request):
-        serializer = RegisterSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            return Response(
-                {
-                    "message": "User registered successfully",
-                    "user": {
-                        "id": user.id,
-                        "username": user.username,
-                        "email": user.email,
-                    },
-                },
-                status=status.HTTP_201_CREATED,
-            )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-
 
 class AuthViewSet(viewsets.ViewSet):
     permission_classes = [AllowAny]
 
     @action(detail=False, methods=["post"])
     def token(self, request):
+        """Endpoint to obtain JWT tokens"""
         serializer = LoginSerializer(data=request.data)
-
         serializer.is_valid(raise_exception=True)
 
         user = authenticate(
@@ -131,7 +116,6 @@ class AuthViewSet(viewsets.ViewSet):
             )
 
         access_token, refresh_token = generate_tokens(user)
-
         return Response(
             {
                 "access_token": access_token,
@@ -147,6 +131,7 @@ class AuthViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=["post"])
     def refresh_token(self, request):
+        """Endpoint to refresh JWT tokens"""
         serializer = TokenRefreshSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 

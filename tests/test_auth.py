@@ -106,3 +106,12 @@ class TestUserManagement:
         response = authenticated_admin_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
+
+        assert "total_users" in response.data
+        assert "total_friends" in response.data
+
+    def test_analytics_as_regular_user(self, authenticated_user_client):
+        url = reverse("user-analytics")
+        response = authenticated_user_client.get(url)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN

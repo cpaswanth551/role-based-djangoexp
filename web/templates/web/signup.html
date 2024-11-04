@@ -1,0 +1,98 @@
+{% extends "web/base.html" %}
+
+{% block title %}Sign Up{% endblock %}
+
+{% block content %}
+<div class="auth-form">
+    <h2 class="form-title">Create an Account</h2>
+    <form id="registerForm" method="POST">
+        {% csrf_token %}
+        <div class="form-group">
+            <label class="form-label" for="username">Username</label>
+            <input type="text" class="form-input" id="username" name="username" required>
+            <div class="error-message" id="username-error"></div>
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="email">Email</label>
+            <input type="email" class="form-input" id="email" name="email" required>
+            <div class="error-message" id="email-error"></div>
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="password">Password</label>
+            <input type="password" class="form-input" id="password" name="password" required>
+            <div class="error-message" id="password-error"></div>
+        </div>
+        <div class="error-message" id="form-error"></div>
+        <div class="success-message" id="form-success"></div>
+        <button type="submit" class="btn" id="registerBtn">Sign Up</button>
+    </form>
+    <div class="auth-links">
+        <p>Already have an account? <a href="{% url 'login' %}">Login</a></p>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    $(document).ready(function () {
+        $('#registerForm').on('submit', function (e) {
+            e.preventDefault();
+            const $form = $(this);
+            const $btn = $('#registerBtn');
+
+            // Reset error states
+            $('.error-message, .success-message').hide();
+            $('.form-input').removeClass('error');
+
+            // Add loading state
+            $btn.addClass('loading').prop('disabled', true);
+
+            $.ajax({
+                url: '{% url "user-register" %}',
+                type: 'POST',
+                data: JSON.stringify({
+                    username: $('#username').val(),
+                    email: $('#email').val(),
+                    password: $('#password').val()
+                }),
+                contentType: 'application/json',
+                headers: {
+                    'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+                },
+                success: function (response) {
+                    $('#form-success')
+                        .text('Registration successful! Redirecting to login...')
+                        .show();
+
+                    // Clear form
+                    $form[0].reset();
+
+                    // Redirect after delay
+                    setTimeout(function () {
+                        window.location.href = '{% url "login" %}';
+                    }, 2000);
+                },
+                error: function (xhr) {
+                    const response = xhr.responseJSON || {};
+
+                    // Handle field-specific errors
+                    ['username', 'email', 'password'].forEach(field => {
+                        if (response[field]) {
+                            $(`#${field}`).addClass('error');
+                            $(`#${field}-error`).text(response[field]).show();
+                        }
+                    });
+
+                    // Handle general errors
+                    if (response.error) {
+                        $('#form-error').text(response.error).show();
+                    }
+                },
+                complete: function () {
+                    $btn.removeClass('loading').prop('disabled', false);
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
+{% endblock %}

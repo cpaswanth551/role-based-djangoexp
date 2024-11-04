@@ -42,6 +42,9 @@ class AuthMiddleware(MiddlewareMixin):
             "/api/v1/auth/token",
             "/api/v1/users/register",
             "/api/v1/auth/refresh_token",
+            "/login",
+            "/register",
+            "/dashboard",
         ]
 
         if any(path.startswith(skip_path) for skip_path in skip_auth_paths):
@@ -49,13 +52,12 @@ class AuthMiddleware(MiddlewareMixin):
 
         auth = JWTAuthentication()
         try:
-            # Only attempt authentication if Authorization header is present
+
             if "Authorization" in request.headers:
                 user_auth_tuple = auth.authenticate(request)
                 if user_auth_tuple is not None:
                     request.user, request.auth = user_auth_tuple
 
-            # For protected routes, ensure user is authenticated
             if not any(path.startswith(skip_path) for skip_path in skip_auth_paths):
                 if not request.user or not request.user.is_authenticated:
                     return JsonResponse(

@@ -68,7 +68,7 @@ def friend_user(friend_user_factory):
 @pytest.fixture
 def authenticated_admin_client(api_client, admin_user):
     """Returns an authenticated client for admin user"""
-    url = reverse("api/v1/auth/token")
+    url = reverse("auth-token")
     response = api_client.post(
         url, {"username": admin_user.username, "password": "password123"}
     )
@@ -80,7 +80,7 @@ def authenticated_admin_client(api_client, admin_user):
 @pytest.fixture
 def authenticated_user_client(api_client, regular_user):
     """Returns an authenticated client for regular user"""
-    url = reverse("api/v1/auth/token")
+    url = reverse("auth-token")
     response = api_client.post(
         url, {"username": regular_user.username, "password": "password123"}
     )
@@ -92,7 +92,7 @@ def authenticated_user_client(api_client, regular_user):
 @pytest.fixture
 def authenticated_friend_client(api_client, friend_user):
     """Returns an authenticated client for friend user"""
-    url = reverse("api/v1/auth/token")
+    url = reverse("auth-token")
     response = api_client.post(
         url, {"username": friend_user.username, "password": "password123"}
     )
